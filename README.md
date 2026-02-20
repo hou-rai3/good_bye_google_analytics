@@ -288,7 +288,7 @@ curl -X POST -H "Content-Type: application/json" -d '{"action": "curl_test_event
 
 ### 7.3 バックエンドログの確認
 
-APIがリクエストを正しく処理しているか、Appコンテナの標準出力を確認する。
+Appコンテナがエラーなく起動していることを確認する
 
 ```bash
 sudo docker compose logs app
@@ -304,10 +304,8 @@ sudo docker compose logs app
 3. ブラウザで `http://localhost:8080/admin` にアクセスする。
 4. 先ほどのテストイベントやボタンクリックの履歴がテーブル形式で表示されていれば成功である。
 
-[ここにブラウザで /admin 画面を開き、ログ一覧が表示されているスクリーンショットを挿入]
 <img width="1847" height="665" alt="image" src="https://github.com/user-attachments/assets/0ad55faa-6cdb-45b7-b4a3-7e54e8796cfd" />
 <img width="1847" height="665" alt="image" src="https://github.com/user-attachments/assets/824de399-eb8d-4974-8be3-647e2ef4395e" />
-<img width="1847" height="665" alt="image" src="https://github.com/user-attachments/assets/72850968-1d6c-4329-b9b8-aa717080f0f7" />
 
 ---
 
