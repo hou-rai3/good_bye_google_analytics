@@ -1,4 +1,5 @@
-# 【Ubuntu 24.04】Docker Composeで構築する自作ユーザー行動監視サーバー（愛称：グッバイ Google Analytics）
+# 【Ubuntu 24.04】Docker Composeで構築する自作ユーザー行動監視サーバー
+（愛称：グッバイ Google Analytics(^_^)/）
 
 ## 1. 課題概要
 
