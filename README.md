@@ -13,7 +13,7 @@
 ### 採用した発展要素
 本構築では、授業内容を基盤として課題要件の以下の発展的要素を取り入れている。
 * **例 B：Docker Compose による Web＋DB の 2 コンテナ構成**
-  実際には Nginx、Flask、MariaDB の3層アーキテクチャを採用している。
+  実際には Nginx、Flask (Gunicorn)、MariaDB の3層アーキテクチャを採用している。
 * **例 Aの一部：逆プロキシであるNginxによるCORS制御**
   外部ドメインからのビーコン送信を受け付けるためのオリジン許可設定を実装している。
 
@@ -27,7 +27,7 @@
 * **実行環境:** VMwareなどのローカル仮想マシン、または学内クラウドVM
 * **利用ツール:** OSパッケージ管理のapt、git、docker、docker compose
 * **ネットワーク条件:** * インターネット接続あり。パッケージおよびDockerイメージ取得のため。
-  * 固定IPまたはローカルIPでのアクセスが可能であり、HTTPのTCP80番ポートが開放されていること。
+  * 固定IPまたはローカルIPでのアクセスが可能であり、HTTPのTCP 8080番ポートが開放されていること。
 * **操作権限:** sudo権限を持つ一般ユーザー。本手順書ではユーザー名を ubuntu と想定する。
 
 ---
@@ -35,19 +35,19 @@
 ## 3. システム構成図とポート設計
 
 ### ポート設計と通信経路
-外部からのアクセスはフロントエンドのNginxがすべて受け付け、リクエストパスに応じて内部のコンテナへ処理を振り分ける。データベースは内部ネットワークに完全に隔離する。
+外部からのアクセスはフロントエンドのNginx（Proxy）がすべて受け付け、リクエストパスに応じて内部のコンテナへ処理を振り分ける。データベースは内部ネットワークに完全に隔離する。
 
-* **外部からNginxへ:** TCP 80のHTTPで受付。静的ファイルを配信する。
-* **NginxからFlaskへ:** リクエストパスが `/api/` または `/admin` の場合、Docker内部ネットワーク経由でFlaskコンテナのTCP 5000へリバースプロキシする。
-* **FlaskからMariaDBへ:** ログの保存・取得のため、Docker内部ネットワーク経由でMariaDBコンテナのTCP 3306へ通信する。
+* **外部からProxy (Nginx) へ:** TCP 8080 のHTTPで受付。静的ファイルを配信する。
+* **ProxyからApp (Flask) へ:** リクエストパスが `/api/` または `/admin` の場合、Docker内部ネットワーク経由でAppコンテナのTCP 5000へリバースプロキシする。
+* **AppからDB (MariaDB) へ:** ログの保存・取得のため、Docker内部ネットワーク経由でDBコンテナのTCP 3306へ通信する。
 
 ### 全体構成図
 ```mermaid
 graph LR
-    User[ユーザー/Client] -- HTTP:80 --> Nginx[Web: Nginx]
-    Nginx -- /api/ 及び /admin --> Flask[App: Flask:5000]
-    Nginx -- 静的ファイル --> Static[HTML/JS]
-    Flask -- TCP:3306 --> DB[(DB: MariaDB)]
+    User[ユーザー/Client] -- HTTP:8080 --> Proxy[Web: Proxy/Nginx]
+    Proxy -- /api/ 及び /admin --> App[App: Flask:5000]
+    Proxy -- 静的ファイル --> Static[HTML/JS]
+    App -- TCP:3306 --> DB[(DB: MariaDB)]
 
 ```
 
@@ -157,7 +157,7 @@ sudo docker compose up -d --build
 
 ### 6.1 docker-compose.yml
 
-各コンテナの依存関係とネットワーク定義。データベースの初期設定もここで指定する。
+各コンテナの依存関係とネットワーク定義。
 
 * **保存パス:** `~/good_bye_google_analytics/simple-tracker/docker-compose.yml`
 * **所有権と権限:** ubuntuユーザー、644
@@ -179,7 +179,7 @@ services:
     networks:
       - tracker-net
 
-  backend:
+  app:
     build: ./backend
     restart: always
     environment:
@@ -192,16 +192,16 @@ services:
     networks:
       - tracker-net
 
-  nginx:
+  proxy:
     image: nginx:alpine
     restart: always
     ports:
-      - "80:80"
+      - "8080:80"
     volumes:
       - ./nginx/default.conf:/etc/nginx/conf.d/default.conf:ro
       - ./html:/usr/share/nginx/html:ro
     depends_on:
-      - backend
+      - app
     networks:
       - tracker-net
 
@@ -216,7 +216,7 @@ networks:
 
 ### 6.2 Nginx 設定ファイル
 
-リバースプロキシとCORSの制御設定。
+リバースプロキシとCORSの制御設定。アップストリームの向き先を `app` サービスに指定している。
 
 * **保存パス:** `~/good_bye_google_analytics/simple-tracker/nginx/default.conf`
 * **所有権と権限:** ubuntuユーザー、644
@@ -239,14 +239,14 @@ server {
         add_header 'Access-Control-Allow-Methods' 'GET, POST, OPTIONS';
         add_header 'Access-Control-Allow-Headers' 'Content-Type';
 
-        proxy_pass http://backend:5000;
+        proxy_pass http://app:5000;
         proxy_set_header Host $host;
         proxy_set_header X-Real-IP $remote_addr;
     }
 
     # 管理画面へのリバースプロキシ
     location /admin {
-        proxy_pass http://backend:5000/admin;
+        proxy_pass http://app:5000/admin;
         proxy_set_header Host $host;
         proxy_set_header X-Real-IP $remote_addr;
     }
@@ -262,7 +262,7 @@ server {
 
 ### 7.1 コンテナの稼働ステータス確認
 
-全てのコンテナがUp状態であること、およびNginxの80番ポートが開放されているか確認する。
+全てのコンテナがUp状態であること、およびProxyコンテナの8080番ポートが開放されているか確認する。
 
 ```bash
 sudo docker compose ps
@@ -273,10 +273,10 @@ sudo docker compose ps
 
 ### 7.2 コマンドラインからのAPI疎通確認
 
-Nginxを経由してBackendのAPIへ正しくルーティングされ、DBへの書き込み処理が走るかテストする。
+Proxy（8080ポート）を経由してAppのAPIへ正しくルーティングされ、DBへの書き込み処理が走るかテストする。
 
 ```bash
-curl -X POST -H "Content-Type: application/json" -d '{"action": "curl_test_event"}' http://localhost/api/track
+curl -X POST -H "Content-Type: application/json" -d '{"action": "curl_test_event"}' http://localhost:8080/api/track
 
 ```
 
@@ -286,20 +286,20 @@ curl -X POST -H "Content-Type: application/json" -d '{"action": "curl_test_event
 
 ### 7.3 バックエンドログの確認
 
-APIがリクエストを正しく処理しているか、コンテナの標準出力を確認する。
+APIがリクエストを正しく処理しているか、Appコンテナの標準出力を確認する。
 
 ```bash
-sudo docker compose logs backend
+sudo docker compose logs app
 
 ```
 
-[ここに docker compose logs backend を実行し、POSTリクエストの処理履歴が出力されているターミナルのスクリーンショットを挿入]
+[ここに docker compose logs app を実行し、POSTリクエストの処理履歴が出力されているターミナルのスクリーンショットを挿入]
 
 ### 7.4 ブラウザからの動作確認とログ閲覧
 
-1. ブラウザで `http://<サーバーのIPアドレス>/test.html` にアクセスする。
+1. ブラウザで `http://<サーバーのIPアドレス>:8080/test.html` にアクセスする。
 2. 画面上のボタンをクリックし、「ログを送信しました」のアラートが出ることを確認する。
-3. ブラウザで `http://<サーバーのIPアドレス>/admin` にアクセスする。
+3. ブラウザで `http://<サーバーのIPアドレス>:8080/admin` にアクセスする。
 4. 先ほどのテストイベントやボタンクリックの履歴がテーブル形式で表示されていれば成功である。
 
 [ここにブラウザで /admin 画面を開き、ログ一覧が表示されているスクリーンショットを挿入]
@@ -308,16 +308,16 @@ sudo docker compose logs backend
 
 ## 8. トラブルシューティング
 
-* **事象1: ポート80が既に使用されている**
-* **エラー:** `Bind for 0.0.0.0:80 failed: port is already allocated`
-* **原因:** Ubuntu標準のApache2等が既に80番ポートを占有している。
-* **対処:** `sudo systemctl stop apache2` および `sudo systemctl disable apache2` でApacheを停止するか、`docker-compose.yml` のNginxポート設定を `"8080:80"` 等に変更する。
+* **事象1: ポート8080が既に使用されている**
+* **エラー:** `Bind for 0.0.0.0:8080 failed: port is already allocated`
+* **原因:** 他のアプリケーションが既に8080番ポートを占有している。
+* **対処:** `docker-compose.yml` のProxyポート設定を `"8081:80"` 等の空いているポートに変更する。
 
 
-* **事象2: Backendがデータベースに接続できない**
-* **エラー:** Backendコンテナのログに `Can't connect to MySQL server` と出る。
+* **事象2: Appがデータベースに接続できない**
+* **エラー:** Appコンテナのログに `Can't connect to MySQL server` と出る。
 * **原因:** DBコンテナの初期化が完了する前にAppコンテナが接続しようとした。
-* **対処:** 本構成では `restart: always` を設定しているため自動で再試行され復旧する。手動で即時解決する場合は `sudo docker compose restart backend` を実行する。
+* **対処:** 本構成では `restart: always` を設定しているため自動で再試行され復旧する。手動で即時解決する場合は `sudo docker compose restart app` を実行する。
 
 
 
@@ -326,12 +326,12 @@ sudo docker compose logs backend
 ## 9. セキュリティとまとめ
 
 * **最小権限の原則:** DB接続にはrootユーザーではなく、専用の一般ユーザーを使用している。
-* **ネットワークの閉域化:** DBやBackendのポートはホストへ直接公開せず、Dockerの内部ネットワークでのみ通信させ、外部からの直接攻撃を防いでいる。
+* **ネットワークの閉域化:** DBやAppのポートはホストへ直接公開せず、Dockerの内部ネットワークでのみ通信させ、外部からの直接攻撃を防いでいる。
 * **秘密情報の扱い:** 本手順書上ではダミー値を記載している。
 
 ### 今後の展望
 
-NginxにSSL証明書を追加してHTTPS化を行うことで、よりセキュアな通信網の構築が可能である。
+ProxyコンテナにSSL証明書を追加してHTTPS化を行うことで、よりセキュアな通信網の構築が可能である。
 
 ---
 
@@ -342,4 +342,6 @@ NginxにSSL証明書を追加してHTTPS化を行うことで、よりセキュ�
 * Nginx リバースプロキシ設定: https://docs.nginx.com/nginx/admin-guide/web-server/reverse-proxy/
 
 **生成AIの利用について**
-本ドキュメントの作成および手順の構成推敲にあたり、Geminiを活用した。出力されたコマンド、設定ファイルの内容、および検証手順はすべてローカル環境にて動作検証を実施し、事実関係と課題要件との整合性を確認した上で提出している。
+本ドキュメントの作成および手順の構成推敲にあたり、LLMを活用した。出力されたコマンド、設定ファイルの内容、および検証手順はすべてローカル環境にて動作検証を実施し、事実関係と課題要件との整合性を確認した上で提出している。
+
+```
