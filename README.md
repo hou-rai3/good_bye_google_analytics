@@ -1,4 +1,4 @@
-# 【Ubuntu 24.04】Docker Composeで構築する自作ユーザー行動監視サーバー（愛称：グッバイ Google Analytics）
+<img width="1847" height="665" alt="image" src="https://github.com/user-attachments/assets/72850968-1d6c-4329-b9b8-aa717080f0f7" /># 【Ubuntu 24.04】Docker Composeで構築する自作ユーザー行動監視サーバー（愛称：グッバイ Google Analytics）
 
 ## 1. 課題概要
 
@@ -117,7 +117,7 @@ docker compose version
 
 ```
 
-[ここに上記コマンドを実行し、バージョンが表示されているターミナルのスクリーンショットを挿入]
+<img width="1560" height="46" alt="image" src="https://github.com/user-attachments/assets/4d15ba06-63a1-4b72-a73d-b01f8b772128" />
 
 ---
 
@@ -269,7 +269,8 @@ sudo docker compose ps
 
 ```
 
-[ここに docker compose ps の結果が表示されているターミナルのスクリーンショットを挿入]
+<img width="1564" height="87" alt="image" src="https://github.com/user-attachments/assets/5def501b-a555-4f06-9b4d-2127e8b632a3" />
+
 
 ### 7.2 コマンドラインからのAPI疎通確認
 
@@ -281,8 +282,9 @@ curl -X POST -H "Content-Type: application/json" -d '{"action": "curl_test_event
 ```
 
 ※期待される出力例：`{"message":"Action Logged","status":"success"}`
+<img width="1563" height="26" alt="image" src="https://github.com/user-attachments/assets/64524b45-b106-47cb-93bb-4d38b991fa4c" />
 
-[ここに curl コマンドを実行し、successメッセージが返ってきたターミナルのスクリーンショットを挿入]
+
 
 ### 7.3 バックエンドログの確認
 
@@ -293,16 +295,19 @@ sudo docker compose logs app
 
 ```
 
-[ここに docker compose logs app を実行し、POSTリクエストの処理履歴が出力されているターミナルのスクリーンショットを挿入]
+<img width="1560" height="534" alt="image" src="https://github.com/user-attachments/assets/20984752-7bec-46d4-8566-60645bb3b6ef" />
 
 ### 7.4 ブラウザからの動作確認とログ閲覧
 
-1. ブラウザで `http://<サーバーのIPアドレス>:8080/test.html` にアクセスする。
+1. ブラウザで `http://localhost:8080/test.html` にアクセスする。
 2. 画面上のボタンをクリックし、「ログを送信しました」のアラートが出ることを確認する。
-3. ブラウザで `http://<サーバーのIPアドレス>:8080/admin` にアクセスする。
+3. ブラウザで `http://localhost:8080/admin` にアクセスする。
 4. 先ほどのテストイベントやボタンクリックの履歴がテーブル形式で表示されていれば成功である。
 
 [ここにブラウザで /admin 画面を開き、ログ一覧が表示されているスクリーンショットを挿入]
+<img width="1847" height="665" alt="image" src="https://github.com/user-attachments/assets/0ad55faa-6cdb-45b7-b4a3-7e54e8796cfd" />
+<img width="1847" height="665" alt="image" src="https://github.com/user-attachments/assets/824de399-eb8d-4974-8be3-647e2ef4395e" />
+
 
 ---
 
