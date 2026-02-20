@@ -1,0 +1,57 @@
+services:
+  # 1. リバースプロキシ (Nginx)
+  proxy:
+    image: nginx:alpine
+    container_name: tracker-proxy
+    ports:
+      - "8080:80"  # ホスト8080 -> コンテナ80
+    volumes:
+      - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+      - ./html:/usr/share/nginx/html:ro # tracker.js配信などのため
+    depends_on:
+      - app
+    networks:
+      - tracker-net
+
+  # 2. アプリケーション (Flask)
+  app:
+    build: ./backend
+    container_name: tracker-app
+    restart: always
+    environment:
+      - DB_HOST=db
+      - DB_USER=tracker_user
+      - DB_PASSWORD=tracker_pass
+      - DB_NAME=tracker_logs
+    depends_on:
+      db:
+        condition: service_healthy
+    networks:
+      - tracker-net
+
+  # 3. データベース (MariaDB)
+  db:
+    image: mariadb:10.6
+    container_name: tracker-db
+    restart: always
+    environment:
+      - MARIADB_ROOT_PASSWORD=root_secret
+      - MARIADB_DATABASE=tracker_logs
+      - MARIADB_USER=tracker_user
+      - MARIADB_PASSWORD=tracker_pass
+    volumes:
+      - db_data:/var/lib/mysql
+    healthcheck:
+      test: ["CMD", "healthcheck.sh", "--connect", "--innodb_initialized"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - tracker-net
+
+networks:
+  tracker-net:
+    driver: bridge
+
+volumes:
+  db_data:
