@@ -1,4 +1,4 @@
-<img width="1847" height="665" alt="image" src="https://github.com/user-attachments/assets/72850968-1d6c-4329-b9b8-aa717080f0f7" /># 【Ubuntu 24.04】Docker Composeで構築する自作ユーザー行動監視サーバー（愛称：グッバイ Google Analytics）
+# 【Ubuntu 24.04】Docker Composeで構築する自作ユーザー行動監視サーバー（愛称：グッバイ Google Analytics）
 
 ## 1. 課題概要
 
@@ -307,7 +307,7 @@ sudo docker compose logs app
 [ここにブラウザで /admin 画面を開き、ログ一覧が表示されているスクリーンショットを挿入]
 <img width="1847" height="665" alt="image" src="https://github.com/user-attachments/assets/0ad55faa-6cdb-45b7-b4a3-7e54e8796cfd" />
 <img width="1847" height="665" alt="image" src="https://github.com/user-attachments/assets/824de399-eb8d-4974-8be3-647e2ef4395e" />
-
+<img width="1847" height="665" alt="image" src="https://github.com/user-attachments/assets/72850968-1d6c-4329-b9b8-aa717080f0f7" />
 
 ---
 
