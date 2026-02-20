@@ -281,7 +281,6 @@ curl -X POST -H "Content-Type: application/json" -d '{"action": "curl_test_event
 
 ```
 
-※期待される出力例：`{"message":"Action Logged","status":"success"}`
 <img width="1563" height="26" alt="image" src="https://github.com/user-attachments/assets/64524b45-b106-47cb-93bb-4d38b991fa4c" />
 
 
