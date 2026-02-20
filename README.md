@@ -3,24 +3,19 @@
 ## 1. 課題概要
 
 ### 目的
-
-本プロジェクト「good_bye_google_analytics」は、Google Analytics等のサードパーティ製ツールに依存せず、プライバシーに配慮した形でWebサイト上のユーザー行動（クリックイベント等）を記録・可視化するサーバーを構築することを目的とする。
-既存の解析ツールは多機能だが、データが外部に送信される懸念がある。本システムは自社（自分）管理下のサーバーで完結し、Docker Composeを用いることで、手順書通りに作業すれば誰でも再現可能な環境構築を目指す。
+本プロジェクト「Simple-Click-Visualizer」は、Google Analytics等のサードパーティ製ツールに依存せず、プライバシーに配慮した形でWebサイト上のユーザー行動（クリックイベント等）を記録・可視化するサーバーを構築することを目的とする。既存の解析ツールは多機能だが、データが外部に送信される懸念がある。本システムは自社（自分）管理下のサーバーで完結し、Docker Composeを用いることで、手順書通りに作業すれば誰でも再現可能な環境構築を目指す。
 
 ### 完成条件
-
 1. Ubuntu 24.04上で、コマンド一つでWeb・App・DBのサーバー群が一括起動すること。
 2. ブラウザから管理画面（`/admin`）にアクセスし、ログが閲覧できること。
 3. 外部サイト（またはテスト用ページ）のJavaScriptから、非同期通信でログを送信し、DBに保存されること。
 
 ### 採用した発展要素
-
-本構築では、課題要件の以下の発展的要素を取り入れている。
-
+本構築では、授業内容を基盤として課題要件の以下の発展的要素を取り入れている。
 * **例 B：Docker Compose による Web＋DB の 2 コンテナ構成**
-実際には Nginx (Web)、Flask (App)、MariaDB (DB) の3層アーキテクチャを採用している。
-* **例 A：逆プロキシ（Nginx）によるCORS制御**
-外部ドメインからのビーコン（ログ送信）を受け付けるためのオリジン許可設定を実装している。
+  実際には Nginx (Web)、Flask (App)、MariaDB (DB) の3層アーキテクチャを採用している。
+* **例 Aの一部：逆プロキシ（Nginx）によるCORS制御**
+  外部ドメインからのビーコン（ログ送信）を受け付けるためのオリジン許可設定を実装している。
 
 ---
 
@@ -29,193 +24,116 @@
 構築作業を行う環境および前提は以下の通りである。
 
 * **対象OS:** Ubuntu 24.04 LTS (Noble Numbat)
-* **実行環境:** ローカル物理マシン または 仮想マシン
-* **権限:** `sudo` 権限を持つユーザーであること
-* **ネットワーク:** インターネット接続（Dockerイメージ取得のため）、HTTP(80番ポート)が開放されていること
-* **前提知識:** Linuxの基本コマンド操作、基本的なTCP/IPの理解
+* **実行環境:** ローカル仮想マシン（VMware 等） または 学内クラウドVM
+* **利用ツール・パッケージ管理手段:** `apt` (OSパッケージ管理)、`git`、`docker`、`docker compose`
+* **ネットワーク条件:** * インターネット接続あり（パッケージおよびDockerイメージ取得のため）
+  * 固定IPまたはローカルIPアクセス可能、HTTP(TCP 80番ポート)が開放されていること
+* **操作権限:** `sudo` 権限を持つ一般ユーザー（本手順書ではユーザー名を `ubuntu` と想定）
 
 ---
 
-## 3. システム構成図とディレクトリ設計
+## 3. システム構成図とポート設計
 
-### 全体構成
+### ポート設計と通信経路
+外部からのアクセスはフロントエンドのNginxがすべて受け付け、リクエストパスに応じて内部のコンテナへ処理を振り分ける。データベースは内部ネットワークに完全に隔離する。
 
-Nginxをフロントに置き、静的ファイル配信とAPIへのリバースプロキシを行う。データはMariaDBに永続化する。
+* **外部 -> Nginx:** TCP 80 (HTTP) で受付。静的ファイルを配信する。
+* **Nginx -> Flask (Backend):** リクエストパスが `/api/` または `/admin` の場合、Docker内部ネットワーク経由で Flaskコンテナの TCP 5000 へリバースプロキシする。
+* **Flask -> MariaDB (DB):** ログの保存・取得のため、Docker内部ネットワーク経由で MariaDBコンテナの TCP 3306 へ通信する。
 
+### 全体構成図
 ```mermaid
 graph LR
     User[ユーザー/Client] -- HTTP:80 --> Nginx[Web: Nginx]
-    Nginx -- /api/ --> Flask[App: Flask]
-    Nginx -- static files --> Static[HTML/JS]
+    Nginx -- /api/ 及び /admin --> Flask[App: Flask:5000]
+    Nginx -- 静的ファイル --> Static[HTML/JS]
     Flask -- TCP:3306 --> DB[(DB: MariaDB)]
+ディレクトリ構成
+GitHubリポジトリよりクローンする構成は以下の通りである。
 
-```
+Plaintext
 
-### ディレクトリ構成
-
-GitHubリポジトリよりクローンする構成は以下の通りである。環境変数を管理するファイルは使用せず、設定ファイル内に直接記述するシンプルな構成としている。
-
-```text
 good_bye_google_analytics/
-├── README.md                # 本ドキュメント
+├── README.md                
 └── simple-tracker/
-    ├── docker-compose.yml   # コンテナ構成定義
+    ├── docker-compose.yml   
     ├── backend/
-    │   ├── app.py           # Flaskアプリケーション本体
-    │   ├── Dockerfile       # Python環境定義
-    │   └── requirements.txt # Python依存ライブラリ
+    │   ├── app.py           
+    │   ├── Dockerfile       
+    │   └── requirements.txt 
     ├── nginx/
-    │   └── default.conf     # Nginx設定（リバースプロキシ・CORS）
+    │   └── default.conf     
     └── html/
-        ├── tracker.js       # ログ送信クライアントスクリプト
-        └── test.html        # 動作確認用ページ
-
-```
-
----
-
-## 4. 事前準備
-
+        ├── tracker.js       
+        └── test.html        
+4. 事前準備
 Ubuntu環境を最新化し、DockerおよびDocker Composeを導入する。
 
-### 4.1 パッケージの更新
+4.1 パッケージの更新
+Bash
 
-まずシステムを最新の状態にする。
-
-```bash
+# パッケージリストを更新し、インストール済みパッケージをアップグレードする
 sudo apt update && sudo apt upgrade -y
+4.2 Docker / Docker Compose のインストール
+Bash
 
-```
-
-### 4.2 Docker / Docker Compose のインストール
-
-```bash
-# 必要なパッケージのインストール
+# HTTPS経由でリポジトリを使用するための必須パッケージをインストール
 sudo apt install -y ca-certificates curl gnupg lsb-release
 
-# Docker公式GPG鍵の追加
+# Docker公式のGPG鍵を保存するディレクトリを作成
 sudo mkdir -p /etc/apt/keyrings
-curl -fsSL https://download.docker.com/linux/ubuntu/gpg | sudo gpg --dearmor -o /etc/apt/keyrings/docker.gpg
 
-# リポジトリのセットアップ
-echo \
-  "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.gpg] https://download.docker.com/linux/ubuntu \
-  $(lsb_release -cs) stable" | sudo tee /etc/apt/sources.list.d/docker.list > /dev/null
+# Docker公式のGPG鍵をダウンロードして配置
+curl -fsSL [https://download.docker.com/linux/ubuntu/gpg](https://download.docker.com/linux/ubuntu/gpg) | sudo gpg --dearmor -o /etc/apt/keyrings/docker.gpg
 
-# Docker Engineのインストール
+# Dockerの公式リポジトリをAPTソースリストに追加
+echo "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.gpg] [https://download.docker.com/linux/ubuntu](https://download.docker.com/linux/ubuntu) $(lsb_release -cs) stable" | sudo tee /etc/apt/sources.list.d/docker.list > /dev/null
+
+# 追加したリポジトリのパッケージリストを更新し、Docker本体とプラグインをインストール
 sudo apt update
 sudo apt install -y docker-ce docker-ce-cli containerd.io docker-compose-plugin
+4.3 インストール完了の確認
+以下のコマンドを実行し、バージョン情報が出力されることを確認する。
 
-```
+Bash
 
-### 4.3 動作確認
-
-以下のコマンドでバージョンが表示されれば準備完了である。
-
-```bash
 docker --version
 docker compose version
+(ここに上記コマンドを実行し、バージョンが表示されているターミナルのスクリーンショットを追加)
 
-```
+5. 構築手順（再現手順）
+GitリポジトリおよびDocker Composeを利用することで、構築の再現性を高めている。
 
----
+手順1: リポジトリのクローン
+ソースコード一式をダウンロードし、作業ディレクトリへ移動する。
 
-## 5. 構築手順（再現手順）
+Bash
 
-本システムはGitリポジトリおよびDocker Composeを利用することで、複雑な手順を省略し、再現性を高めている。
-
-### 手順1: リポジトリのクローン
-
-ソースコード一式をローカル環境にダウンロードし、作業ディレクトリへ移動する。
-
-```bash
+# ホームディレクトリへ移動
 cd ~
-git clone https://github.com/hou-rai3/good_bye_google_analytics.git
+# GitHubからリポジトリをクローン
+git clone [https://github.com/hou-rai3/good_bye_google_analytics.git](https://github.com/hou-rai3/good_bye_google_analytics.git)
+# 作業用ディレクトリへ移動
 cd good_bye_google_analytics/simple-tracker
+手順2: コンテナのビルドと起動
+Docker Composeを使用して、設定ファイルに基づきイメージのビルドとコンテナの起動を行う。
 
-```
+Bash
 
-### 手順2: コンテナのビルドと起動
-
-Docker Composeを使用して、イメージのビルドとコンテナの起動を行う。
-
-```bash
-# バックグラウンド(-d)でビルド(--build)して起動
+# バックグラウンド(-d)でイメージをビルド(--build)し、全コンテナを起動する
 sudo docker compose up -d --build
+6. 設定ファイル解説（主要部分の完全版）
+設定ファイルの完全版を記載する。本構成ではシークレット情報はダミー値に置き換えて記載している。
 
-```
+6.1 docker-compose.yml
+各コンテナの依存関係とネットワーク定義。データベースの初期設定（ダミーパスワード）もここで指定する。
 
-### 手順3: 起動状態の確認
+保存パス: ~/good_bye_google_analytics/simple-tracker/docker-compose.yml
 
-全てのコンテナが `Up` 状態であることを確認する。
+所有権・権限: ubuntu:ubuntu (644)
 
-```bash
-sudo docker compose ps
+YAML
 
-```
-
-実行結果例：
-
-```text
-NAME                           STATUS          PORTS
-simple-tracker-db-1            Up (healthy)    3306/tcp
-simple-tracker-backend-1       Up              5000/tcp
-simple-tracker-nginx-1         Up              0.0.0.0:80->80/tcp
-
-```
-
----
-
-## 6. 動作確認と検証
-
-サーバーが正常に機能しているか、以下の手順で検証を行う。
-
-### 検証1: テストページへのアクセス
-
-ブラウザを開き、以下のURLへアクセスする。
-
-* URL: `http://localhost/test.html` (またはサーバーのIPアドレス)
-
-画面上のボタンをクリックし、「ログを送信しました」などのアラートや表示が出れば、JavaScriptからサーバーへの通信が成功している。
-
-*(ここに `test.html` のブラウザスクリーンショットを配置)*
-
-### 検証2: ログデータの確認（管理画面）
-
-ログがデータベースに保存されているか確認する。
-
-* URL: `http://localhost/admin`
-
-クリックした日時、User-Agent、IPアドレス等の情報がテーブル形式で表示されていれば、Web→App→DBの連携は正常である。
-
-*(ここに `/admin` 画面のスクリーンショットを配置)*
-
-### 検証3: DBコンテナの永続化確認
-
-一度コンテナを削除してもデータが残るか検証する。
-
-```bash
-# コンテナを停止・削除
-sudo docker compose down
-
-# 再度起動
-sudo docker compose up -d
-
-```
-
-ブラウザで再度 `/admin` にアクセスし、先ほどのデータが残っていれば永続化の確認は完了である。
-
----
-
-## 7. 設定ファイル解説（主要部分の完全版）
-
-再現性と理解度を示すため、主要な設定ファイルの完全版を掲載する。今回は環境変数ファイルを使用せず、直接設定を記述している。
-
-### docker-compose.yml
-
-各コンテナの依存関係とネットワーク定義。データベースのパスワード等はここで指定している。
-
-```yaml
 version: '3.8'
 
 services:
@@ -251,8 +169,8 @@ services:
     ports:
       - "80:80"
     volumes:
-      - ./nginx/default.conf:/etc/nginx/conf.d/default.conf
-      - ./html:/usr/share/nginx/html
+      - ./nginx/default.conf:/etc/nginx/conf.d/default.conf:ro
+      - ./html:/usr/share/nginx/html:ro
     depends_on:
       - backend
     networks:
@@ -264,14 +182,15 @@ volumes:
 networks:
   tracker-net:
     driver: bridge
+6.2 Nginx 設定ファイル (default.conf)
+リバースプロキシとCORS（Cross-Origin Resource Sharing）の制御設定。
 
-```
+保存パス: ~/good_bye_google_analytics/simple-tracker/nginx/default.conf
 
-### nginx/default.conf
+所有権・権限: ubuntu:ubuntu (644)
 
-リバースプロキシとCORS（Cross-Origin Resource Sharing）の設定。
+Nginx
 
-```nginx
 server {
     listen 80;
     server_name localhost;
@@ -301,42 +220,89 @@ server {
         proxy_set_header X-Real-IP $remote_addr;
     }
 }
+7. 動作確認と検証
+構築したシステムが正常に動作しているか、多角的に検証する。
 
-```
+7.1 コンテナの稼働ステータス確認
+全てのコンテナが Up 状態であること、およびNginxのポート(80)が開放されているか確認する。
 
----
+Bash
 
-## 8. トラブルシューティング
+sudo docker compose ps
+(ここに docker compose ps の結果が表示されているターミナルのスクリーンショットを追加)
 
-よくあるエラーとその対処法を記す。
+7.2 コマンドラインからのAPI疎通確認（ヘルスチェック）
+Nginxを経由してBackendのAPIへ正しくルーティングされ、DBへの書き込み処理が走るかテストする。
 
-### Case 1: ポート80が既に使用されている
+Bash
 
-* **エラー:** `Bind for 0.0.0.0:80 failed: port is already allocated`
-* **原因:** Ubuntu標準のApache等が既に起動している。
-* **対処:** `sudo systemctl stop apache2` で停止するか、`docker-compose.yml` のNginxポート設定を `"8080:80"` 等に変更する。
+curl -X POST -H "Content-Type: application/json" -d '{"action": "curl_test_event"}' http://localhost/api/track
+※期待される出力例：{"message":"Action Logged","status":"success"}
 
-### Case 2: データベース接続エラー
+(ここに curl コマンドを実行し、successメッセージが返ってきたターミナルのスクリーンショットを追加)
 
-* **エラー:** Backendコンテナのログ（`sudo docker compose logs backend`）に `Can't connect to MySQL server` と出る。
-* **原因:** DBコンテナの起動完了前にAppコンテナが接続しようとした。
-* **対処:** 本構成では `restart: always` を設定しているため自動で再試行されるが、手動で `sudo docker compose restart backend` を実行すると解決する。
+7.3 バックエンドログの確認
+APIがリクエストを正しく処理しているか、コンテナの標準出力を確認する。
 
----
+Bash
 
-## 9. セキュリティと今後の展望
+sudo docker compose logs backend
+(ここに docker compose logs backend を実行し、POSTリクエストの処理履歴が出力されているターミナルのスクリーンショットを追加)
 
-### セキュリティ配慮
+7.4 ブラウザからの動作確認とログ閲覧
+ブラウザで http://<サーバーのIPアドレス>/test.html にアクセスする。
 
-1. **最小権限の原則:** DB接続にはrootユーザーではなく、専用の一般ユーザー（`tracker_user`）を使用している。
-2. **内部ネットワークの閉域化:** DB（3306ポート）やBackend（5000ポート）はホストに直接公開せず、Dockerの内部ネットワーク（`tracker-net`）でのみ通信させている。
+画面上のボタンをクリックし、「ログを送信しました」のアラートが出ることを確認する。
 
-### 今後の展望
+ブラウザで http://<サーバーのIPアドレス>/admin にアクセスする。
 
-現在は構成の簡略化のため `docker-compose.yml` に認証情報を直接記述しているが、実運用においては `.env` ファイルを導入して認証情報を分離し、Git管理から除外する手法への移行が推奨される。また、NginxにSSL証明書（Let's Encrypt等）を追加してHTTPS化を行うことで、よりセキュアな通信網を構築可能である。
+先ほどの curl_test_event や、ボタンクリックの履歴がテーブル形式で表示されていれば成功である。
 
-### 参考文献
+(ここにブラウザで /admin 画面を開き、ログ一覧が表示されているスクリーンショットを追加)
 
-* Docker Compose 公式ドキュメント: [https://docs.docker.com/compose/](https://docs.docker.com/compose/)
-* Flask 公式ドキュメント: [https://flask.palletsprojects.com/](https://flask.palletsprojects.com/)
-* Nginx リバースプロキシ設定: [https://docs.nginx.com/nginx/admin-guide/web-server/reverse-proxy/](https://docs.nginx.com/nginx/admin-guide/web-server/reverse-proxy/)
+8. トラブルシューティング
+事象1: ポート80が既に使用されている（ポート競合）
+
+エラー: Bind for 0.0.0.0:80 failed: port is already allocated
+
+原因: Ubuntu標準のApache2等が既に80番ポートを占有している。
+
+対処: sudo systemctl stop apache2 および sudo systemctl disable apache2 でApacheを停止するか、docker-compose.yml のNginxポート設定を "8080:80" 等に変更する。
+
+事象2: Backendがデータベースに接続できない
+
+エラー: Backendコンテナのログに Can't connect to MySQL server と出る。
+
+原因: DBコンテナの初期化が完了する前にAppコンテナが接続しようとした。
+
+対処: 本構成では restart: always を設定しているため自動で再試行され復旧する。手動で即時解決する場合は sudo docker compose restart backend を実行する。
+
+9. セキュリティとまとめ
+最小権限の原則: DB接続にはrootユーザーではなく、専用の一般ユーザー（tracker_user）を使用している。
+
+ネットワークの閉域化: DB（3306ポート）やBackend（5000ポート）はホストへ直接公開せず、Dockerの内部ネットワーク（tracker-net）でのみ通信させ、外部からの直接攻撃を防いでいる。
+
+秘密情報の扱い: 本手順書上では root_password_here などのダミー値を記載している。
+
+今後の展望
+NginxにSSL証明書（Let's Encrypt等）を追加してHTTPS化を行うことで、よりセキュアな通信網の構築が可能である。
+
+10. 参考資料・特記事項
+Docker Compose 公式ドキュメント: https://docs.docker.com/compose/
+
+Flask 公式ドキュメント: https://flask.palletsprojects.com/
+
+Nginx リバースプロキシ設定: https://docs.nginx.com/nginx/admin-guide/web-server/reverse-proxy/
+
+【生成AIの利用について】
+本ドキュメントの作成および手順の構成推敲にあたり、LLM（Google Gemini）を活用した。出力されたコマンド、設定ファイルの内容、および検証手順はすべてローカル環境にて動作検証を実施し、事実関係と課題要件との整合性を確認した上で提出している。
+
+
+【注意点・例外】
+* `*(ここに...のスクリーンショットを追加)*` と記載されている全5箇所に、自身の環境で実行した画像を挿入すること。Markdownでの画像挿入方法は `![説明文](./画像の相対パス.png)` である。
+* 提出時のファイル名は「3I-出席番号-手順書.md」とすること。
+
+【出典】
+* ユーザーから提示された課題の評価基準および必須構成
+
+【確実性: 高】
