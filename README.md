@@ -1,15 +1,15 @@
-# 【Ubuntu 24.04】Docker Composeで構築する自作ユーザー行動監視サーバー（愛称 〜グッバイ Google Analytics (^_^)/ 〜）
+# 【Ubuntu 24.04】Docker Composeで構築する自作ユーザー行動監視サーバー（愛称：グッバイ Google Analytics）
 
 ## 1. 課題概要
 
 ### 目的
 
 本プロジェクト「Simple-Click-Visualizer」は、Google Analytics等のサードパーティ製ツールに依存せず、プライバシーに配慮した形でWebサイト上のユーザー行動（クリックイベント等）を記録・可視化するサーバーを構築することを目的とする。
-既存の解析ツールは多機能だが、データが外部に送信される懸念がある。本システムは**自社（自分）管理下のサーバーで完結**し、Docker Composeを用いることで、手順書通りに作業すれば誰でも再現可能な環境構築を目指す。
+既存の解析ツールは多機能だが、データが外部に送信される懸念がある。本システムは自社（自分）管理下のサーバーで完結し、Docker Composeを用いることで、手順書通りに作業すれば誰でも再現可能な環境構築を目指す。
 
 ### 完成条件
 
-1. Ubuntu 24.04上で、コマンド一つでWeb・AP・DBサーバー群が一括起動すること。
+1. Ubuntu 24.04上で、コマンド一つでWeb・App・DBのサーバー群が一括起動すること。
 2. ブラウザから管理画面（`/admin`）にアクセスし、ログが閲覧できること。
 3. 外部サイト（またはテスト用ページ）のJavaScriptから、非同期通信でログを送信し、DBに保存されること。
 
@@ -18,13 +18,9 @@
 本構築では、課題要件の以下の発展的要素を取り入れている。
 
 * **例 B：Docker Compose による Web＋DB の 2 コンテナ構成**
-* 実際には **Nginx (Web)**、**Flask (App)**、**MariaDB (DB)** の3層アーキテクチャを採用。
-
-
+実際には Nginx (Web)、Flask (App)、MariaDB (DB) の3層アーキテクチャを採用している。
 * **例 A：逆プロキシ（Nginx）によるCORS制御**
-* 外部ドメインからのビーコン（ログ送信）を受け付けるためのオリジン許可設定を実装。
-
-
+外部ドメインからのビーコン（ログ送信）を受け付けるためのオリジン許可設定を実装している。
 
 ---
 
@@ -57,21 +53,22 @@ graph LR
 
 ### ディレクトリ構成
 
-GitHubリポジトリよりクローンする構成は以下の通りである。
+GitHubリポジトリよりクローンする構成は以下の通りである。環境変数を管理するファイルは使用せず、設定ファイル内に直接記述するシンプルな構成としている。
 
 ```text
-~/simple-tracker/
-├── docker-compose.yml       # コンテナ構成定義（完全版）
-├── .env                     # 環境変数（パスワード等を管理）
-├── backend/
-│   ├── app.py               # Flaskアプリケーション本体
-│   ├── Dockerfile           # Python環境定義
-│   └── requirements.txt     # Python依存ライブラリ
-├── nginx/
-│   └── default.conf         # Nginx設定（リバースプロキシ・CORS）
-└── html/
-    ├── tracker.js           # ログ送信クライアントスクリプト
-    └── test.html            # 動作確認用ページ
+good_bye_google_analytics/
+├── README.md                # 本ドキュメント
+└── simple-tracker/
+    ├── docker-compose.yml   # コンテナ構成定義
+    ├── backend/
+    │   ├── app.py           # Flaskアプリケーション本体
+    │   ├── Dockerfile       # Python環境定義
+    │   └── requirements.txt # Python依存ライブラリ
+    ├── nginx/
+    │   └── default.conf     # Nginx設定（リバースプロキシ・CORS）
+    └── html/
+        ├── tracker.js       # ログ送信クライアントスクリプト
+        └── test.html        # 動作確認用ページ
 
 ```
 
@@ -91,8 +88,6 @@ sudo apt update && sudo apt upgrade -y
 ```
 
 ### 4.2 Docker / Docker Compose のインストール
-
-Ubuntu公式リポジトリ、またはDocker公式の手順に従う。ここではaptを用いた標準的な手順を示す。
 
 ```bash
 # 必要なパッケージのインストール
@@ -118,8 +113,8 @@ sudo apt install -y docker-ce docker-ce-cli containerd.io docker-compose-plugin
 以下のコマンドでバージョンが表示されれば準備完了である。
 
 ```bash
+docker --version
 docker compose version
-# 出力例: Docker Compose version v2.xx.x
 
 ```
 
@@ -131,40 +126,16 @@ docker compose version
 
 ### 手順1: リポジトリのクローン
 
-ソースコード一式をローカル環境にダウンロードする。
+ソースコード一式をローカル環境にダウンロードし、作業ディレクトリへ移動する。
 
 ```bash
 cd ~
-git clone https://github.com/oka-bacon/simple-tracker.git
-cd simple-tracker
+git clone https://github.com/hou-rai3/good_bye_google_analytics.git
+cd good_bye_google_analytics/simple-tracker
 
 ```
 
-### 手順2: 環境変数の設定（セキュリティ配慮）
-
-DBのパスワードなどの機密情報は、直接コードに書かず `.env` ファイルで管理する。
-サンプルファイルをコピーし、必要に応じて編集する。
-
-```bash
-# サンプルから本番用設定を作成
-cp .env.example .env
-
-# 内容を確認（任意でパスワードを変更可能）
-cat .env
-
-```
-
-**.env の内容（例）**
-
-```ini
-MYSQL_ROOT_PASSWORD=my-secret-pw
-MYSQL_DATABASE=tracker_db
-MYSQL_USER=tracker_user
-MYSQL_PASSWORD=tracker_user_pw
-
-```
-
-### 手順3: コンテナのビルドと起動
+### 手順2: コンテナのビルドと起動
 
 Docker Composeを使用して、イメージのビルドとコンテナの起動を行う。
 
@@ -174,7 +145,7 @@ sudo docker compose up -d --build
 
 ```
 
-### 手順4: 起動状態の確認
+### 手順3: 起動状態の確認
 
 全てのコンテナが `Up` 状態であることを確認する。
 
@@ -186,10 +157,10 @@ sudo docker compose ps
 実行結果例：
 
 ```text
-NAME                     STATUS          PORTS
-simple-tracker-db-1      Up (healthy)    3306/tcp
-simple-tracker-backend-1 Up              5000/tcp
-simple-tracker-nginx-1   Up              0.0.0.0:80->80/tcp
+NAME                           STATUS          PORTS
+simple-tracker-db-1            Up (healthy)    3306/tcp
+simple-tracker-backend-1       Up              5000/tcp
+simple-tracker-nginx-1         Up              0.0.0.0:80->80/tcp
 
 ```
 
@@ -205,9 +176,9 @@ simple-tracker-nginx-1   Up              0.0.0.0:80->80/tcp
 
 * URL: `http://localhost/test.html` (またはサーバーのIPアドレス)
 
-画面上のボタンをクリックし、「Action Logged!」などの表示が出れば、JavaScriptからサーバーへの通信が成功している。
+画面上のボタンをクリックし、「ログを送信しました」などのアラートや表示が出れば、JavaScriptからサーバーへの通信が成功している。
 
-*(ここに `test.html` のブラウザスクリーンショットを貼る)*
+*(ここに `test.html` のブラウザスクリーンショットを配置)*
 
 ### 検証2: ログデータの確認（管理画面）
 
@@ -215,9 +186,9 @@ simple-tracker-nginx-1   Up              0.0.0.0:80->80/tcp
 
 * URL: `http://localhost/admin`
 
-クリックした日時、User-Agent等の情報がテーブル形式で表示されていれば、Web→App→DBの連携は正常である。
+クリックした日時、User-Agent、IPアドレス等の情報がテーブル形式で表示されていれば、Web→App→DBの連携は正常である。
 
-*(ここに `/admin` 画面のスクリーンショットを貼る)*
+*(ここに `/admin` 画面のスクリーンショットを配置)*
 
 ### 検証3: DBコンテナの永続化確認
 
@@ -230,19 +201,19 @@ sudo docker compose down
 # 再度起動
 sudo docker compose up -d
 
-# ブラウザで /admin にアクセスし、先ほどのデータが残っていれば合格
-
 ```
+
+ブラウザで再度 `/admin` にアクセスし、先ほどのデータが残っていれば永続化の確認は完了である。
 
 ---
 
 ## 7. 設定ファイル解説（主要部分の完全版）
 
-再現性と理解度を示すため、主要な設定ファイルの完全版を掲載する。
+再現性と理解度を示すため、主要な設定ファイルの完全版を掲載する。今回は環境変数ファイルを使用せず、直接設定を記述している。
 
 ### docker-compose.yml
 
-各コンテナの依存関係とネットワーク定義。
+各コンテナの依存関係とネットワーク定義。データベースのパスワード等はここで指定している。
 
 ```yaml
 version: '3.8'
@@ -252,10 +223,10 @@ services:
     image: mariadb:10.6
     restart: always
     environment:
-      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD}
-      MYSQL_DATABASE: ${MYSQL_DATABASE}
-      MYSQL_USER: ${MYSQL_USER}
-      MYSQL_PASSWORD: ${MYSQL_PASSWORD}
+      MYSQL_ROOT_PASSWORD: root_password_here
+      MYSQL_DATABASE: tracker_db
+      MYSQL_USER: tracker_user
+      MYSQL_PASSWORD: user_password_here
     volumes:
       - db_data:/var/lib/mysql
     networks:
@@ -266,9 +237,9 @@ services:
     restart: always
     environment:
       DB_HOST: db
-      DB_USER: ${MYSQL_USER}
-      DB_PASSWORD: ${MYSQL_PASSWORD}
-      DB_NAME: ${MYSQL_DATABASE}
+      DB_USER: tracker_user
+      DB_PASSWORD: user_password_here
+      DB_NAME: tracker_db
     depends_on:
       - db
     networks:
@@ -322,6 +293,13 @@ server {
         proxy_set_header Host $host;
         proxy_set_header X-Real-IP $remote_addr;
     }
+
+    # 管理画面へのリバースプロキシ
+    location /admin {
+        proxy_pass http://backend:5000/admin;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+    }
 }
 
 ```
@@ -335,28 +313,27 @@ server {
 ### Case 1: ポート80が既に使用されている
 
 * **エラー:** `Bind for 0.0.0.0:80 failed: port is already allocated`
-* **原因:** Apache等が既に起動している。
-* **対処:** `sudo systemctl stop apache2` で停止するか、`docker-compose.yml` のポート設定を `"8080:80"` 等に変更する。
+* **原因:** Ubuntu標準のApache等が既に起動している。
+* **対処:** `sudo systemctl stop apache2` で停止するか、`docker-compose.yml` のNginxポート設定を `"8080:80"` 等に変更する。
 
 ### Case 2: データベース接続エラー
 
-* **エラー:** Backendコンテナのログに `Can't connect to MySQL server` と出る。
-* **原因:** DBの起動完了前にAppが接続しようとした。
-* **対処:** 本構成では `restart: always` を入れているため自動で再試行されるが、手動で `sudo docker compose restart backend` を行うと解決する。
+* **エラー:** Backendコンテナのログ（`sudo docker compose logs backend`）に `Can't connect to MySQL server` と出る。
+* **原因:** DBコンテナの起動完了前にAppコンテナが接続しようとした。
+* **対処:** 本構成では `restart: always` を設定しているため自動で再試行されるが、手動で `sudo docker compose restart backend` を実行すると解決する。
 
 ---
 
-## 9. セキュリティとまとめ
+## 9. セキュリティと今後の展望
 
 ### セキュリティ配慮
 
-1. **環境変数による秘密情報の分離:** パスワード類は `.env` に隔離し、Git管理外とした。
-2. **最小権限の原則:** DBユーザーにはrootではなく、専用ユーザー(`tracker_user`)を使用。
-3. **内部ネットワークの閉域化:** DBやBackendはホストのポートへ公開せず、Dockerネットワーク内のみで通信させている。
+1. **最小権限の原則:** DB接続にはrootユーザーではなく、専用の一般ユーザー（`tracker_user`）を使用している。
+2. **内部ネットワークの閉域化:** DB（3306ポート）やBackend（5000ポート）はホストに直接公開せず、Dockerの内部ネットワーク（`tracker-net`）でのみ通信させている。
 
 ### 今後の展望
 
-現在はHTTPのみの対応だが、Nginxの設定にSSL証明書（Let's Encrypt等）を追加することでHTTPS化が可能である。また、ログの可視化にGrafana等を導入することで、より直感的な分析が可能になると考えられる。
+現在は構成の簡略化のため `docker-compose.yml` に認証情報を直接記述しているが、実運用においては `.env` ファイルを導入して認証情報を分離し、Git管理から除外する手法への移行が推奨される。また、NginxにSSL証明書（Let's Encrypt等）を追加してHTTPS化を行うことで、よりセキュアな通信網を構築可能である。
 
 ### 参考文献
 
